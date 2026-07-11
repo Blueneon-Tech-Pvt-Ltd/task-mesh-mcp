@@ -61,6 +61,24 @@ Add the following to your `claude_desktop_config.json`:
         "TASKMESH_API_URL": "http://localhost:3001",
         "TASKMESH_API_TOKEN": "tm_<your_generated_token_here>"
       }
+}
+  }
+}
+```
+
+### Option B: Remote / NPM Setup (Using npx)
+If you publish this package to NPM (e.g. `@task-mesh/mcp-server`), you can configure the IDE to pull it automatically without cloning:
+
+```json
+{
+  "mcpServers": {
+    "taskmesh": {
+      "command": "npx",
+      "args": ["-y", "@task-mesh/mcp-server"],
+      "env": {
+        "TASKMESH_API_URL": "https://your-api.domain.com",
+        "TASKMESH_API_TOKEN": "tm_<your_generated_token_here>"
+      }
     }
   }
 }

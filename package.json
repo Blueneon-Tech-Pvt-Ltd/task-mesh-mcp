@@ -1,0 +1,26 @@
+{
+  "name": "@task-mesh/mcp-server",
+  "version": "1.0.0",
+  "description": "Production-grade MCP server for TaskMesh",
+  "main": "dist/index.js",
+  "bin": {
+    "taskmesh-mcp": "dist/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --clean",
+    "dev": "tsup src/index.ts --format esm --watch --onSuccess \"node dist/index.js\"",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.4.0",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "pino": "^9.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.3"
+  }
+}
