@@ -2,6 +2,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { ApiClient } from './client/api-client.js';
+import { EntityResolver } from './client/resolver.js';
 import { RateLimiter } from './rate-limiter/limiter.js';
 import { logger } from './audit/logger.js';
 import { registerAllTools } from './tools/index.js';
@@ -10,8 +11,9 @@ import * as dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-// Create API Client and Rate Limiter
+// Create API Client, Resolver, and Rate Limiter
 const api = new ApiClient();
+const resolver = new EntityResolver(api);
 const limiter = new RateLimiter();
 
 // Create the MCP server
@@ -77,7 +79,7 @@ const toolRegistryWrapper = {
 };
 
 // Register all tools
-registerAllTools(toolRegistryWrapper, api);
+registerAllTools(toolRegistryWrapper, api, resolver);
 
 // Register MCP handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => {

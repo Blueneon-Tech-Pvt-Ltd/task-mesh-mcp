@@ -88,37 +88,42 @@ If you publish this package to NPM (e.g. `@task-mesh/mcp-server`), you can confi
 
 ## Available Tools
 
-The server registers tools divided into four domains:
+## Agent-Optimized Architecture & Available Tools
+
+The MCP server is designed for zero-hop resolution and token efficiency:
+- **Zero-Hop Identifiers**: Accepts human-readable keys (e.g. `ALPHA-14`), project slugs (`ALPHA`), and status names (`"In Progress"`, `"DONE"`).
+- **80-90% Context Token Reduction**: Automatically strips Prisma metadata and returns compact Markdown tables/summaries.
+
+### 🧠 Agent Context & Discovery (1-Shot)
+- `get_agent_context`: Returns a ~150-token workspace snapshot (projects, active sprint, assigned tasks, running timer). Call this at the start of any conversation.
+- `search_issues`: Org-wide fast search by text query, issue key (e.g. `ALPHA-14`), status, or priority.
+- `start_working_on_issue`: Atomic 1-shot tool that finds the issue, sets status to `IN_PROGRESS`, starts the live stopwatch timer, and returns details.
 
 ### 📁 Projects
-- `list_projects`: Lists all organization projects.
-- `get_project`: Gets a project by UUID.
-- `create_project`: Creates a new project.
+- `list_projects`: Lists organization projects with keys, leads, and workflow statuses.
+- `get_project`: Gets a project by key (e.g. `ALPHA`) or UUID.
+- `create_project`: Creates a new project workspace.
 - `update_project`: Updates a project's status, metadata, or dates.
-- `delete_project`: Deletes a project.
-- `add_workflow_status`: Adds a new status column (e.g., "In Review") to a project board.
 
 ### 📝 Issues
-- `list_issues`: Lists issues (filters by project, status, sprint, type, search term).
-- `get_issue`: Retrieves detailed issue state.
-- `create_issue`: Creates a new issue (type, description, estimate, priority).
-- `update_issue`: Updates title, description, status, sprint, estimate, or assignees.
-- `delete_issue`: Deletes an issue.
+- `list_issues`: Lists issues with compact Markdown tables (project key optional).
+- `get_issue`: Retrieves detailed issue state by key (e.g. `ALPHA-14`) or UUID.
+- `create_issue`: Creates a new issue using project key and human status/assignee names.
+- `update_issue`: Updates title, description, status (e.g. `"In Progress"`), estimate, or assignees.
+- `delete_issue`: Soft deletes an issue.
 - `add_comment`: Adds discussion comments.
 
 ### 🏃 Sprints
-- `list_sprints`: Lists all sprints for a project.
-- `get_sprint`: Gets sprint details.
+- `list_sprints`: Lists all sprints for a project using its key (e.g. `ALPHA`).
+- `get_sprint`: Gets sprint details and backlog.
 - `create_sprint`: Creates a planned sprint.
-- `update_sprint`: Updates sprint dates, goal, or status.
 - `start_sprint`: Moves a sprint from PLANNED to ACTIVE.
-- `complete_sprint`: Completes an active sprint and handles issue rollover.
-- `delete_sprint`: Deletes a sprint.
+- `complete_sprint`: Completes an active sprint.
 
 ### ⏱️ Time Tracking
-- `log_time`: Submits manual work hours.
+- `get_active_timer`: Checks currently running timer and elapsed time.
+- `start_timer`: Starts a timer on a specific issue using its key (`ALPHA-14`).
+- `stop_timer`: Stops the current timer and saves the logged duration.
+- `log_time`: Submits manual work hours using issue key (`ALPHA-14`).
 - `list_time_entries`: Lists time logs with filter options.
-- `get_active_timer`: Checks for currently running stopwatches.
-- `start_timer`: Starts a timer on a specific issue.
-- `stop_timer`: Stops the current timer and saves it as a time entry.
-# task-mesh-mcp
+
