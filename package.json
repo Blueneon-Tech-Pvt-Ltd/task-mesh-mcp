@@ -1,12 +1,15 @@
 {
   "name": "@task-mesh/mcp-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Production-grade MCP server for TaskMesh",
   "main": "dist/index.js",
   "bin": {
     "taskmesh-mcp": "dist/index.js"
   },
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --clean",
     "dev": "tsup src/index.ts --format esm --watch --onSuccess \"node dist/index.js\"",
