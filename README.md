@@ -23,20 +23,17 @@ pnpm run build
 
 ### 3. Add to your AI Editor
 
-> **Note on `TASKMESH_API_URL`:**
-> * **Local Development:** `http://localhost:3001`
-> * **Production / Hosted Server:** `https://crm.bluentech.com.np` (or your live TaskMesh domain)
-> *(The MCP server automatically normalizes routes to `/api/v1`)*
+> Defaults to production (`https://crm.bluentech.com.np`). If developing locally, you can set `TASKMESH_API_URL=http://localhost:3001`.
 
 #### 🎯 Cursor Setup
 1. Open **Cursor Settings** (⚙️) ➔ **Features** ➔ **MCP**.
 2. Click **+ Add New MCP Server**:
    * **Name**: `taskmesh`
    * **Type**: `command`
-   * **Command**: `npx -y @task-mesh/mcp-server@latest` *(or `node /absolute/path/to/task-mesh/mcp/dist/index.js`)*
+   * **Command**: `npx -y @task-mesh/mcp-server@latest`
    * **Environment Variables**:
      ```env
-     TASKMESH_API_URL=http://localhost:3001  # Or https://crm.bluentech.com.np
+     TASKMESH_API_URL=https://crm.bluentech.com.np
      TASKMESH_API_TOKEN=tm_your_copied_token_here
      ```
 
@@ -49,7 +46,7 @@ Add to your `claude_desktop_config.json`:
       "command": "npx",
       "args": ["-y", "@task-mesh/mcp-server@latest"],
       "env": {
-        "TASKMESH_API_URL": "http://localhost:3001",
+        "TASKMESH_API_URL": "https://crm.bluentech.com.np",
         "TASKMESH_API_TOKEN": "tm_your_copied_token_here"
       }
     }
@@ -65,7 +62,7 @@ Add to your `claude_desktop_config.json`:
       "command": "npx",
       "args": ["-y", "@task-mesh/mcp-server@latest"],
       "env": {
-        "TASKMESH_API_URL": "http://localhost:3001",
+        "TASKMESH_API_URL": "https://crm.bluentech.com.np",
         "TASKMESH_API_TOKEN": "tm_your_copied_token_here"
       }
     }
