@@ -20,7 +20,7 @@ const limiter = new RateLimiter();
 const server = new Server(
   {
     name: 'taskmesh-mcp-server',
-    version: '1.1.0',
+    version: '1.1.2',
   },
   {
     capabilities: {

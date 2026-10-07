@@ -1,6 +1,6 @@
 {
   "name": "@task-mesh/mcp-server",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "description": "Production-grade MCP server for TaskMesh",
   "main": "dist/index.js",
   "bin": {
