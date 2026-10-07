@@ -5,6 +5,7 @@ import { registerProjectTools } from './projects.js';
 import { registerIssueTools } from './issues.js';
 import { registerSprintTools } from './sprints.js';
 import { registerTimeTools } from './time.js';
+import { registerPromptKitTools } from './prompts.js';
 
 export function registerAllTools(server: any, api: ApiClient, resolver: EntityResolver) {
   registerContextTools(server, api, resolver);
@@ -12,4 +13,6 @@ export function registerAllTools(server: any, api: ApiClient, resolver: EntityRe
   registerIssueTools(server, api, resolver);
   registerSprintTools(server, api, resolver);
   registerTimeTools(server, api, resolver);
+  registerPromptKitTools(server, api, resolver);
 }
+

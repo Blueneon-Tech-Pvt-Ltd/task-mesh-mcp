@@ -250,4 +250,144 @@ export function registerIssueTools(server: any, api: ApiClient, resolver: Entity
       }
     }
   );
+
+  // 7. Finish Issue (Composite 1-shot write-back: stops timer, sets status to Done/In Review, logs summary comment)
+  server.tool(
+    'finish_issue',
+    '1-shot composite action to complete work on an issue: stops any running timer, updates status (default: "Done"), and posts a structured execution summary comment with files changed, PR link, and notes.',
+    {
+      identifier: { type: 'string', description: 'Issue Key (e.g. "ALPHA-14") or Issue UUID' },
+      summary: { type: 'string', description: '1-3 sentence summary of what was accomplished' },
+      status: { type: 'string', description: 'Status to transition to (e.g. "Done", "In Review", "QA")', required: false },
+      filesChanged: { type: 'array', description: 'List of file paths modified or created', items: { type: 'string' }, required: false },
+      prUrl: { type: 'string', description: 'Link to Pull Request created for this task', required: false },
+      notes: { type: 'string', description: 'Optional technical notes, caveats, or follow-ups', required: false },
+      hoursSpent: { type: 'number', description: 'Optional hours spent to log if not using live timer', required: false },
+    },
+    async ({
+      identifier,
+      summary,
+      status = 'Done',
+      filesChanged = [],
+      prUrl,
+      notes,
+      hoursSpent,
+    }: {
+      identifier: string;
+      summary: string;
+      status?: string;
+      filesChanged?: string[];
+      prUrl?: string;
+      notes?: string;
+      hoursSpent?: number;
+    }) => {
+      try {
+        const issue = await api.get<any>(`/pms/issues/${identifier}`);
+        if (!issue) throw new Error(`Issue "${identifier}" not found`);
+
+        // 1. Stop timer if running
+        try {
+          await api.post<any>('/time/timers/stop', {});
+        } catch {
+          // Non-fatal if timer wasn't running
+        }
+
+        // 2. Log time if hours explicitly provided
+        if (hoursSpent && hoursSpent > 0) {
+          try {
+            await api.post<any>('/time/entries', {
+              projectId: issue.projectId,
+              issueId: issue.id,
+              hours: hoursSpent,
+              description: summary,
+              date: new Date().toISOString().split('T')[0],
+              billable: true,
+            });
+          } catch {
+            // Non-fatal
+          }
+        }
+
+        // 3. Resolve status ID & Update status
+        try {
+          const statusId = await resolver.resolveStatusId(issue.projectId, status);
+          await api.patch<any>(`/pms/issues/${issue.id}`, { statusId });
+        } catch {
+          // If status resolution fails, continue
+        }
+
+        // 4. Construct structured comment
+        const commentLines = [
+          `🤖 **AI Work Completed** (${status})`,
+          '',
+          `**Summary:** ${summary}`,
+          filesChanged?.length ? `\n**Files Changed:**\n${filesChanged.map((f) => `- \`${f}\``).join('\n')}` : '',
+          prUrl ? `\n**PR:** ${prUrl}` : '',
+          notes ? `\n**Notes:** ${notes}` : '',
+        ].filter(Boolean).join('\n');
+
+        await api.post<any>(`/pms/issues/${issue.id}/comments`, { content: commentLines });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ **Finished ${formatIssueKey(issue)}**\n- Status set to: **${status}**\n- Timer stopped / worklog recorded\n- Summary comment posted to issue history`,
+            },
+          ],
+        };
+      } catch (err: any) {
+        return { isError: true, content: [{ type: 'text', text: err.message }] };
+      }
+    }
+  );
+
+  // 8. Propose Issue (AI drafts an issue for human review)
+  server.tool(
+    'propose_issue',
+    'Propose a new task or bug discovered during autonomous execution. Lands as a draft issue with rationale for human approval before entering sprints.',
+    {
+      projectId: { type: 'string', description: 'Project key (e.g. "ALPHA") or UUID' },
+      title: { type: 'string', description: 'Short descriptive issue title' },
+      description: { type: 'string', description: 'Detailed markdown description' },
+      type: { type: 'string', description: 'Issue type: "TASK", "BUG", "STORY", "EPIC"', required: false },
+      priority: { type: 'string', description: 'Priority: "LOW", "MEDIUM", "HIGH", "URGENT"', required: false },
+      rationale: { type: 'string', description: 'Why this task is proposed (evidence discovered during work)', required: false },
+    },
+    async ({
+      projectId,
+      title,
+      description,
+      type = 'TASK',
+      priority = 'MEDIUM',
+      rationale,
+    }: any) => {
+      try {
+        const resolvedProjectId = await resolver.resolveProjectId(projectId);
+        const descWithRationale = rationale
+          ? `> 💡 **AI Rationale:** ${rationale}\n\n${description}`
+          : description;
+
+        const issue = await api.post<any>('/pms/issues', {
+          projectId: resolvedProjectId,
+          title,
+          description: descWithRationale,
+          type,
+          priority,
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `📬 **Proposed Issue Created:** **${formatIssueKey(issue)}** - "${issue.title}"\n- Type: ${type} | Priority: ${priority}\n- Ready for human triage in project backlog`,
+            },
+          ],
+        };
+      } catch (err: any) {
+        return { isError: true, content: [{ type: 'text', text: err.message }] };
+      }
+    }
+  );
 }
+
