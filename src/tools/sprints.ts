@@ -1,18 +1,41 @@
 import { ApiClient } from '../client/api-client.js';
+import { EntityResolver } from '../client/resolver.js';
 
-export function registerSprintTools(server: any, api: ApiClient) {
+export function registerSprintTools(server: any, api: ApiClient, resolver: EntityResolver) {
   // 1. List Sprints
   server.tool(
     'list_sprints',
-    'List all sprints for a project',
+    'List all sprints for a project using its key (e.g. "ALPHA") or UUID',
     {
-      projectId: { type: 'string', description: 'Project UUID' },
+      projectId: { type: 'string', description: 'Project key (e.g. "ALPHA") or UUID' },
+      json: { type: 'boolean', description: 'Set true to return raw JSON', required: false },
     },
-    async ({ projectId }: { projectId: string }) => {
+    async ({ projectId, json }: { projectId: string; json?: boolean }) => {
       try {
-        const sprints = await api.get<any[]>(`/pms/sprints/project/${projectId}`);
+        const resolvedId = await resolver.resolveProjectId(projectId);
+        const sprints = await api.get<any[]>(`/pms/sprints/project/${resolvedId}`);
+
+        if (json) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(sprints, null, 2) }],
+          };
+        }
+
+        if (!sprints || sprints.length === 0) {
+          return { content: [{ type: 'text', text: '*No sprints found for this project.*' }] };
+        }
+
+        const rows = sprints.map((s: any) => {
+          const status = s.status || 'PLANNED';
+          const dates = `${s.startDate ? new Date(s.startDate).toLocaleDateString() : 'N/A'} - ${s.endDate ? new Date(s.endDate).toLocaleDateString() : 'N/A'}`;
+          const goal = s.goal || '-';
+          return `| **${s.name}** | \`${status}\` | ${dates} | ${goal} | \`${s.id}\` |`;
+        }).join('\n');
+
+        const table = `| Sprint | Status | Duration | Goal | Sprint ID |\n| :--- | :--- | :--- | :--- | :--- |\n${rows}`;
+
         return {
-          content: [{ type: 'text', text: JSON.stringify(sprints, null, 2) }],
+          content: [{ type: 'text', text: `### Sprints for Project\n${table}` }],
         };
       } catch (err: any) {
         return {
@@ -33,8 +56,21 @@ export function registerSprintTools(server: any, api: ApiClient) {
     async ({ id }: { id: string }) => {
       try {
         const sprint = await api.get<any>(`/pms/sprints/${id}`);
+        const issues = (sprint.issues || []).map((si: any) => {
+          const issue = si.issue || si;
+          return `- **${issue.title}** (${issue.status?.name || 'Status: ' + issue.statusId}, Est: ${issue.estimate ?? '-'} pts)`;
+        }).join('\n');
+
+        const output = `## Sprint: ${sprint.name} (${sprint.status})
+- **Goal**: ${sprint.goal || '_No goal set._'}
+- **Dates**: ${sprint.startDate ? new Date(sprint.startDate).toLocaleDateString() : 'N/A'} ➔ ${sprint.endDate ? new Date(sprint.endDate).toLocaleDateString() : 'N/A'}
+- **Total Issues**: ${sprint.issues?.length || 0}
+
+### Sprint Backlog
+${issues || '_No issues assigned to this sprint._'}`;
+
         return {
-          content: [{ type: 'text', text: JSON.stringify(sprint, null, 2) }],
+          content: [{ type: 'text', text: output }],
         };
       } catch (err: any) {
         return {
@@ -48,19 +84,26 @@ export function registerSprintTools(server: any, api: ApiClient) {
   // 3. Create Sprint
   server.tool(
     'create_sprint',
-    'Create a new sprint',
+    'Create a new sprint in a project',
     {
-      projectId: { type: 'string', description: 'Project UUID' },
+      projectId: { type: 'string', description: 'Project key (e.g. "ALPHA") or UUID' },
       name: { type: 'string', description: 'Name of the sprint (e.g. "Sprint 1")' },
       goal: { type: 'string', description: 'Optional sprint goal', required: false },
-      startDate: { type: 'string', description: 'Optional ISO start date', required: false },
-      endDate: { type: 'string', description: 'Optional ISO end date', required: false },
+      startDate: { type: 'string', description: 'Optional ISO start date (YYYY-MM-DD)', required: false },
+      endDate: { type: 'string', description: 'Optional ISO end date (YYYY-MM-DD)', required: false },
     },
     async (params: any) => {
       try {
-        const sprint = await api.post<any>('/pms/sprints', params);
+        const resolvedProjectId = await resolver.resolveProjectId(params.projectId);
+        const sprint = await api.post<any>('/pms/sprints', {
+          ...params,
+          projectId: resolvedProjectId,
+        });
         return {
-          content: [{ type: 'text', text: JSON.stringify(sprint, null, 2) }],
+          content: [{
+            type: 'text',
+            text: `✅ **Created Sprint "${sprint.name}"** (ID: \`${sprint.id}\`)`,
+          }],
         };
       } catch (err: any) {
         return {
@@ -71,45 +114,18 @@ export function registerSprintTools(server: any, api: ApiClient) {
     }
   );
 
-  // 4. Update Sprint
-  server.tool(
-    'update_sprint',
-    'Update sprint details',
-    {
-      id: { type: 'string', description: 'Sprint UUID to update' },
-      name: { type: 'string', description: 'Sprint name', required: false },
-      goal: { type: 'string', description: 'Sprint goal', required: false },
-      startDate: { type: 'string', description: 'ISO start date', required: false },
-      endDate: { type: 'string', description: 'ISO end date', required: false },
-      status: { type: 'string', description: 'Status (PLANNED, ACTIVE, COMPLETED)', required: false },
-    },
-    async ({ id, ...data }: { id: string; [key: string]: any }) => {
-      try {
-        const sprint = await api.put<any>(`/pms/sprints/${id}`, data);
-        return {
-          content: [{ type: 'text', text: JSON.stringify(sprint, null, 2) }],
-        };
-      } catch (err: any) {
-        return {
-          isError: true,
-          content: [{ type: 'text', text: err.message }],
-        };
-      }
-    }
-  );
-
-  // 5. Start Sprint
+  // 4. Start Sprint
   server.tool(
     'start_sprint',
-    'Start a planned sprint',
+    'Start a planned sprint to make it ACTIVE',
     {
       id: { type: 'string', description: 'Sprint UUID' },
     },
     async ({ id }: { id: string }) => {
       try {
-        const sprint = await api.post<any>(`/pms/sprints/${id}/start`);
+        const sprint = await api.post<any>(`/pms/sprints/${id}/start`, {});
         return {
-          content: [{ type: 'text', text: JSON.stringify(sprint, null, 2) }],
+          content: [{ type: 'text', text: `🚀 **Sprint "${sprint.name}" is now ACTIVE!**` }],
         };
       } catch (err: any) {
         return {
@@ -120,41 +136,18 @@ export function registerSprintTools(server: any, api: ApiClient) {
     }
   );
 
-  // 6. Complete Sprint
+  // 5. Complete Sprint
   server.tool(
     'complete_sprint',
-    'Complete an active sprint and optionally roll over incomplete issues',
-    {
-      id: { type: 'string', description: 'Sprint UUID' },
-      rolloverSprintId: { type: 'string', description: 'Optional sprint UUID to roll over incomplete issues to', required: false },
-    },
-    async ({ id, rolloverSprintId }: { id: string; rolloverSprintId?: string }) => {
-      try {
-        const result = await api.post<any>(`/pms/sprints/${id}/complete`, { rolloverSprintId });
-        return {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        };
-      } catch (err: any) {
-        return {
-          isError: true,
-          content: [{ type: 'text', text: err.message }],
-        };
-      }
-    }
-  );
-
-  // 7. Delete Sprint
-  server.tool(
-    'delete_sprint',
-    'Delete a sprint',
+    'Complete an active sprint',
     {
       id: { type: 'string', description: 'Sprint UUID' },
     },
     async ({ id }: { id: string }) => {
       try {
-        await api.delete<void>(`/pms/sprints/${id}`);
+        const sprint = await api.post<any>(`/pms/sprints/${id}/complete`, {});
         return {
-          content: [{ type: 'text', text: `Sprint ${id} successfully deleted.` }],
+          content: [{ type: 'text', text: `🏁 **Sprint "${sprint.name}" marked as COMPLETED.**` }],
         };
       } catch (err: any) {
         return {

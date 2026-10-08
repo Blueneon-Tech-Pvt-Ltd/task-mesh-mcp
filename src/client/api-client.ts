@@ -1,12 +1,13 @@
 import axios, { AxiosInstance } from 'axios';
 import { logger } from '../audit/logger.js';
+import { envConfig } from '../config/envconfig.js';
 
 export class ApiClient {
   private client: AxiosInstance;
 
   constructor() {
-    const baseURL = process.env.TASKMESH_API_URL || 'http://localhost:3001';
-    const token = process.env.TASKMESH_API_TOKEN;
+    const baseURL = envConfig.apiUrl;
+    const token = envConfig.apiToken;
 
     if (!token) {
       logger.error('TASKMESH_API_TOKEN environment variable is not defined.');

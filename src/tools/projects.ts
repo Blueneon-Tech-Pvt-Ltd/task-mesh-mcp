@@ -1,16 +1,26 @@
 import { ApiClient } from '../client/api-client.js';
+import { EntityResolver } from '../client/resolver.js';
+import { formatProjectsList } from '../client/formatter.js';
 
-export function registerProjectTools(server: any, api: ApiClient) {
-  // 1. List Projects
+export function registerProjectTools(server: any, api: ApiClient, resolver: EntityResolver) {
+  // 1. List Projects (Token-optimized)
   server.tool(
     'list_projects',
-    'List all projects in the organization',
-    {},
-    async () => {
+    'List all projects in the organization with keys, leads, and available workflow statuses',
+    {
+      json: { type: 'boolean', description: 'Set true to return raw JSON instead of overview table', required: false },
+    },
+    async ({ json }: { json?: boolean } = {}) => {
       try {
         const projects = await api.get<any[]>('/pms/projects');
+        if (json) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(projects, null, 2) }],
+          };
+        }
+
         return {
-          content: [{ type: 'text', text: JSON.stringify(projects, null, 2) }],
+          content: [{ type: 'text', text: formatProjectsList(projects) }],
         };
       } catch (err: any) {
         return {
@@ -21,18 +31,49 @@ export function registerProjectTools(server: any, api: ApiClient) {
     }
   );
 
-  // 2. Get Project
+  // 2. Get Project by Key (e.g. ALPHA) or UUID
   server.tool(
     'get_project',
-    'Get detailed information of a specific project by ID',
+    'Get detailed information of a project using its key (e.g. "ALPHA") or UUID',
     {
-      id: { type: 'string', description: 'The project UUID' },
+      identifier: { type: 'string', description: 'Project key (e.g. "ALPHA") or UUID' },
+      json: { type: 'boolean', description: 'Set true to return raw JSON', required: false },
     },
-    async ({ id }: { id: string }) => {
+    async ({ identifier, id, json }: { identifier?: string; id?: string; json?: boolean }) => {
       try {
-        const project = await api.get<any>(`/pms/projects/${id}`);
+        const target = identifier || id;
+        if (!target) throw new Error('Project identifier is required');
+
+        const resolvedId = await resolver.resolveProjectId(target);
+        const project = await api.get<any>(`/pms/projects/${resolvedId}`);
+
+        if (json) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(project, null, 2) }],
+          };
+        }
+
+        const statuses = (project.workflowStatuses || [])
+          .map((s: any) => `- **${s.name}** (Category: \`${s.category}\`, ID: \`${s.id}\`)`)
+          .join('\n');
+
+        const members = (project.members || [])
+          .map((m: any) => `- ${m.user?.name || m.user?.email || 'Member'} (${m.role})`)
+          .join('\n');
+
+        const output = `## Project: ${project.name} (${project.key})
+- **Lead**: ${project.lead?.name || 'Unassigned'} (${project.lead?.email || ''})
+- **Description**: ${project.description || '_None_'}
+- **Dates**: ${project.startDate ? new Date(project.startDate).toISOString().split('T')[0] : 'N/A'} ➔ ${project.targetDate ? new Date(project.targetDate).toISOString().split('T')[0] : 'N/A'}
+
+### Workflow Statuses
+${statuses || '_No statuses configured._'}
+
+### Team Members (${project.members?.length || 0})
+${members || '_No members._'}`;
+
         return {
-          content: [{ type: 'text', text: JSON.stringify(project, null, 2) }],
+          content: [{ type: 'text', text: output }],
         };
       } catch (err: any) {
         return {
@@ -46,22 +87,23 @@ export function registerProjectTools(server: any, api: ApiClient) {
   // 3. Create Project
   server.tool(
     'create_project',
-    'Create a new project',
+    'Create a new project workspace',
     {
       name: { type: 'string', description: 'Name of the project' },
-      key: { type: 'string', description: 'Project key/code (e.g. PROJ)' },
+      key: { type: 'string', description: 'Project key/code prefix (e.g. "PROJ", "ALPHA")' },
       description: { type: 'string', description: 'Project description', required: false },
-      leadId: { type: 'string', description: 'User UUID of the project lead' },
-      folderId: { type: 'string', description: 'Optional project folder UUID', required: false },
-      deptId: { type: 'string', description: 'Optional department UUID', required: false },
-      startDate: { type: 'string', description: 'Optional ISO start date', required: false },
-      targetDate: { type: 'string', description: 'Optional ISO target/due date', required: false },
+      leadId: { type: 'string', description: 'User UUID of the project lead', required: false },
+      startDate: { type: 'string', description: 'Optional ISO start date (YYYY-MM-DD)', required: false },
+      targetDate: { type: 'string', description: 'Optional ISO target date (YYYY-MM-DD)', required: false },
     },
     async (params: any) => {
       try {
         const project = await api.post<any>('/pms/projects', params);
         return {
-          content: [{ type: 'text', text: JSON.stringify(project, null, 2) }],
+          content: [{
+            type: 'text',
+            text: `✅ **Created Project ${project.name} (${project.key})**\nID: \`${project.id}\``,
+          }],
         };
       } catch (err: any) {
         return {
@@ -75,12 +117,11 @@ export function registerProjectTools(server: any, api: ApiClient) {
   // 4. Update Project
   server.tool(
     'update_project',
-    'Update an existing project metadata or status',
+    'Update an existing project metadata or status using key or UUID',
     {
-      id: { type: 'string', description: 'Project UUID to update' },
+      identifier: { type: 'string', description: 'Project key (e.g. "ALPHA") or UUID' },
       name: { type: 'string', description: 'Name of the project', required: false },
       description: { type: 'string', description: 'Project description', required: false },
-      leadId: { type: 'string', description: 'User UUID of the project lead', required: false },
       status: {
         type: 'string',
         description: 'Status (PLANNING, ACTIVE, PAUSED, COMPLETED, CANCELLED)',
@@ -89,60 +130,18 @@ export function registerProjectTools(server: any, api: ApiClient) {
       startDate: { type: 'string', description: 'ISO start date', required: false },
       targetDate: { type: 'string', description: 'ISO target date', required: false },
     },
-    async ({ id, ...data }: { id: string; [key: string]: any }) => {
+    async ({ identifier, id, ...data }: { identifier?: string; id?: string; [key: string]: any }) => {
       try {
-        const project = await api.put<any>(`/pms/projects/${id}`, data);
-        return {
-          content: [{ type: 'text', text: JSON.stringify(project, null, 2) }],
-        };
-      } catch (err: any) {
-        return {
-          isError: true,
-          content: [{ type: 'text', text: err.message }],
-        };
-      }
-    }
-  );
+        const target = identifier || id;
+        if (!target) throw new Error('Project identifier is required');
 
-  // 5. Delete Project
-  server.tool(
-    'delete_project',
-    'Delete a project',
-    {
-      id: { type: 'string', description: 'Project UUID to delete' },
-    },
-    async ({ id }: { id: string }) => {
-      try {
-        await api.delete<void>(`/pms/projects/${id}`);
+        const resolvedId = await resolver.resolveProjectId(target);
+        const project = await api.put<any>(`/pms/projects/${resolvedId}`, data);
         return {
-          content: [{ type: 'text', text: `Project ${id} successfully deleted.` }],
-        };
-      } catch (err: any) {
-        return {
-          isError: true,
-          content: [{ type: 'text', text: err.message }],
-        };
-      }
-    }
-  );
-
-  // 6. Add Workflow Status
-  server.tool(
-    'add_workflow_status',
-    'Add a new workflow status to a project',
-    {
-      projectId: { type: 'string', description: 'Project UUID' },
-      name: { type: 'string', description: 'Name of the status (e.g. "QA Review")' },
-      color: { type: 'string', description: 'Hex code or color name', required: false },
-      category: { type: 'string', description: 'Category (TODO, IN_PROGRESS, DONE, BACKLOG)', required: false },
-      startTimerTriggers: { type: 'boolean', description: 'Start timer when entering this status', required: false },
-      stopTimerTriggers: { type: 'boolean', description: 'Stop timer when entering this status', required: false },
-    },
-    async ({ projectId, ...dto }: { projectId: string; [key: string]: any }) => {
-      try {
-        const status = await api.post<any>(`/pms/projects/${projectId}/statuses`, dto);
-        return {
-          content: [{ type: 'text', text: JSON.stringify(status, null, 2) }],
+          content: [{
+            type: 'text',
+            text: `✅ **Updated Project ${project.name} (${project.key})**`,
+          }],
         };
       } catch (err: any) {
         return {
